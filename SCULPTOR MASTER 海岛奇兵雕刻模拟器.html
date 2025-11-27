@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>海岛奇兵雕刻序列模拟器</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bb-bg: #151525;
+            --bb-panel: rgba(35, 40, 50, 0.95);
+            --bb-gold: #f1c40f;
+            --bb-green: #2ecc71;
+            --bb-blue: #3498db;
+            --bb-red: #e74c3c;
+            --bb-purple: #9b59b6;
+            --bb-border: #4a5568;
+            --header-height: 70px;
+        }
+
+        body {
+            background-color: var(--bb-bg);
+            background-image: url('./image/背景.webp');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-attachment: fixed;
+            background-size: cover;
+            font-family: 'Roboto', sans-serif;
+            color: #ecf0f1;
+            overflow: hidden; /* 防止页面整体滚动，交给内部容器 */
+            height: 100vh;
+        }
+
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: -1;
+        }
+
+        /* ============ 滚动条美化 (Requirement 5) ============ */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: #1a1a2e; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { 
+            background: #444; border-radius: 5px; border: 2px solid #1a1a2e; 
+        }
+        ::-webkit-scrollbar-thumb:hover { background: var(--bb-gold); }
+
+        /* ============ 布局系统 (Flexbox for Side Slide) ============ */
+        .app-container {
+            display: flex;
+            height: calc(100vh - var(--header-height));
+            width: 100%;
+            overflow: hidden;
+            padding: 15px 20px;
+            gap: 20px;
+        }
+
+        /* 左侧主区域 */
+        .main-section {
+            flex: 1;
+            min-width: 0; /* 防止表格撑爆flex */
+            display: flex;
+            flex-direction: column;
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        /* 右侧侧边栏 (Requirement 1: Slide Right Hide) */
+        .side-section {
+            width: 320px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s, margin 0.4s;
+            overflow: hidden;
+            opacity: 1;
+        }
+        
+        /* 折叠状态 */
+        .side-section.collapsed {
+            width: 0;
+            margin-left: 0;
+            opacity: 0;
+            padding: 0;
+        }
+
+        /* 顶部导航 */
+        .game-navbar {
+            height: var(--header-height);
+            background: rgba(0, 0, 0, 0.95);
+            border-bottom: 2px solid var(--bb-gold);
+            padding: 0 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 100;
+        }
+        .brand-title {
+            font-family: 'Black Ops One', cursive;
+            color: var(--bb-gold);
+            text-shadow: 2px 2px 0px #000;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+        }
+
+        /* 通用面板 */
+        .game-panel {
+            background: var(--bb-panel);
+            border: 1px solid var(--bb-border);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            background: linear-gradient(90deg, #1a202c, #000);
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--bb-gold);
+            font-weight: bold;
+            color: var(--bb-gold);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        /* 表格样式 */
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+        }
+        .seq-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .seq-table th {
+            background: rgba(20, 20, 20, 0.98);
+            color: #ccc;
+            padding: 12px;
+            text-align: center;
+            border-bottom: 2px solid #555;
+            font-size: 1rem;
+            vertical-align: middle;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        
+        /* 表头图标 (Requirement 4) */
+        .th-icon-suffix {
+            width: 24px; height: 24px; 
+            object-fit: contain; 
+            vertical-align: middle; 
+            margin-left: 8px; /* 文字后面 */
+            filter: drop-shadow(0 0 3px rgba(255,255,255,0.2));
+        }
+
+        .seq-table td {
+            padding: 15px 5px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+            vertical-align: middle;
+        }
+
+        /* 属性格子 */
+        .attr-box {
+            width: 140px; height: 140px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 16px; border: 2px solid #555;
+            margin: 0 auto;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; position: relative;
+            transition: all 0.25s;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+        }
+        .attr-box:hover { border-color: #fff; transform: scale(1.05); z-index: 10; }
+        .attr-box img.main-attr { width: 136px; height: 136px; object-fit: contain; border-radius: 14px;filter: drop-shadow(0 5px 10px rgba(0,0,0,0.5)); }
+        .attr-box.empty::after { content: '+'; color: #444; font-size: 50px; font-weight: 300; }
+
+        /* 修饰符图标 */
+        .modifier-icon {
+            position: absolute; bottom: -5px; right: -5px; width: 45px; height: 45px; z-index: 5;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+        }
+
+        /* 高亮与历史状态 */
+        .current-row { background: linear-gradient(to right, rgba(241, 196, 15, 0.05), rgba(241, 196, 15, 0.15), rgba(241, 196, 15, 0.05)); border-left: 4px solid var(--bb-gold); }
+        .current-row td:first-child { color: var(--bb-gold); font-weight: bold; font-size: 1.5em; text-shadow: 0 0 10px var(--bb-gold); }
+        .best-choice { border-color: var(--bb-gold) !important; box-shadow: 0 0 15px rgba(241, 196, 15, 0.4); animation: pulse 2s infinite; }
+        .best-choice::before { content: "BEST"; position: absolute; top: 128px; background: var(--bb-gold); color: #000; font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: bold; z-index: 15; }
+        @keyframes pulse { 50% { box-shadow: 0 0 25px rgba(241, 196, 15, 0.6); } }
+
+        .history-row { background: rgba(0,0,0,0.4); }
+        .history-row .attr-box.not-selected { opacity: 0.1; filter: grayscale(100%); transform: scale(0.8); cursor: default; border-color: #333 !important; box-shadow: none; }
+        .history-row .attr-box.is-selected { opacity: 1; border-color: var(--bb-gold) !important; cursor: default; }
+        .history-row .best-choice { animation: none; box-shadow: none; } .history-row .best-choice::before { display: none; }
+
+        /* 日期时间显示 (Requirement 3) */
+        .timestamp-tag { display: block; font-size: 0.6em; color: var(--bb-gold); opacity: 0.7; margin-top: 5px; font-family: monospace; }
+
+        /* 折叠栏 (Requirement 6) */
+        .fold-bar {
+            background: #252535; color: #888; padding: 10px; text-align: center; cursor: pointer; border-bottom: 1px solid #444; transition: 0.2s; font-size: 0.9rem;
+        }
+        .fold-bar:hover { background: #303040; color: #fff; }
+
+        /* ============ 右侧列表 ============ */
+        .intro-list { flex: 1; overflow-y: auto; padding: 15px; }
+        .intro-card {
+            background: rgba(0,0,0,0.3); border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; display: flex; align-items: center;
+        }
+        .intro-img { width: 110px; height: 110px; object-fit: contain; margin-right: 15px; background: rgba(0,0,0,0.2); border-radius: 5px; }
+        
+        /* ============ 弹窗交互 (Requirement 2) ============ */
+        .modal-content { background-color: #2c3e50; border: 2px solid var(--bb-gold); }
+        .selection-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; padding: 10px; }
+        .select-item {
+            background: #1e272e; border: 3px solid #444; border-radius: 12px; height: 220px;
+            position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            overflow: hidden; /* 关键：确保遮罩不溢出 */
+        }
+        .select-item img { width: 130px; height: 130px; object-fit: contain; margin-bottom: 10px; transition: 0.3s; }
+        
+        /* 遮罩层 - 默认隐藏 */
+        .select-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px;
+            opacity: 0; transition: opacity 0.2s ease-in-out;
+            pointer-events: none; /* 未显示时不可点击 */
+        }
+        /* 鼠标悬停显示 (Requirement 2) */
+        .select-item:hover .select-overlay { opacity: 1; pointer-events: auto; }
+        
+        .btn-choice {
+            background: #333; border: 1px solid #666; color: #fff; padding: 8px 15px; border-radius: 20px; width: 80%;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s;
+        }
+        .btn-choice:hover { background: var(--bb-gold); color: #000; border-color: var(--bb-gold); transform: scale(1.05); }
+        .btn-choice img { width: 20px; height: 20px; margin-right: 5px; margin-bottom: 0; }
+
+        /* 建造按钮 */
+        .build-btn {
+            position: absolute; bottom: -30px; left: 50%; transform: translateX(-50%);
+            background: var(--bb-gold); color: #000; border: none; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; opacity: 0; transition: 0.3s; z-index: 20;
+        }
+        .current-row .attr-box:hover .build-btn { bottom: -15px; opacity: 1; }
+        
+        /* 状态边框 */
+        .border-green { border-color: var(--bb-green) !important; }
+        .border-blue { border-color: var(--bb-blue) !important; }
+        .border-red { border-color: var(--bb-red) !important; }
+        .border-purple { border-color: var(--bb-purple) !important; }
+
+    </style>
+</head>
+<body>
+
+    <nav class="game-navbar">
+        <div class="d-flex align-items-center">
+            <span class="brand-title me-4"><i class="fas fa-hammer me-2"></i>SCULPTOR MASTER</span>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-outline-light" onclick="undoLastBuild()"><i class="fas fa-undo me-1"></i> 撤回</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="resetAll()"><i class="fas fa-trash me-1"></i> 重置</button>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-database me-1"></i> 数据管理
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-dark">
+                        <li><a class="dropdown-item" href="#" onclick="exportData()"><i class="fas fa-download me-2"></i>导出数据</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="document.getElementById('import-file').click()"><i class="fas fa-upload me-2"></i>导入数据</a></li>
+                    </ul>
+                </div>
+                <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importData(event)">
+            </div>
+        </div>
+        
+        <div class="d-flex align-items-center">
+            <div class="text-end me-3">
+                <div style="font-size: 10px; color: #aaa; text-transform: uppercase;">Current Sequence</div>
+                <div class="fs-4 fw-bold text-warning" id="nav-seq">#01</div>
+            </div>
+            <!-- 右侧面板切换按钮 -->
+            <button class="btn btn-link text-warning fs-4" onclick="toggleSidePanel()" title="切换图鉴">
+                <i class="fas fa-book-open" id="panel-toggle-icon"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div class="app-container">
+        <!-- 左侧主区域 -->
+        <div class="main-section">
+            <div class="game-panel">
+                <div class="panel-header">
+                    <span><i class="fas fa-clipboard-list me-2"></i> 序列监控</span>
+                    
+                </div>
+                
+                <div class="table-container" id="table-scroll-area">
+                    <table class="seq-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 100px;">序号</th>
+                                <!-- Requirement 4: Icons after text -->
+                                <th>生命 <img src="./image/生命.png" class="th-icon-suffix" onerror="this.style.display='none'"></th>
+                                <th>寒冰 <img src="./image/寒冰.png" class="th-icon-suffix" onerror="this.style.display='none'"></th>
+                                <th>熔岩 <img src="./image/熔岩.png" class="th-icon-suffix" onerror="this.style.display='none'"></th>
+                                <th>暗黑 <img src="./image/暗黑.png" class="th-icon-suffix" onerror="this.style.display='none'"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="sequence-body">
+                            <!-- JS动态渲染 -->
+                        </tbody>
+                    </table>
+
+                    <div id="empty-hint" class="text-center py-5 text-muted mt-5">
+                        <i class="fas fa-search fa-4x mb-3 opacity-50"></i>
+                        <h4>暂无记录</h4>
+                        <button class="btn btn-warning mt-3" onclick="addNewRow()">添加一行模拟</button>
+                        <br>
+                        <button class="btn btn-link text-secondary mt-2" onclick="generateDemo()">生成演示数据</button>
+                        <br>
+                        <button class="btn btn-link text-info mt-2" onclick="generateTestDataForExport()">生成测试数据（用于导出）</button>
+                    </div>
+
+                    <div class="p-4 text-center" id="add-row-container" style="display:none;">
+                        <button class="btn btn-outline-secondary w-50" onclick="addNewRow()">
+                            <i class="fas fa-plus me-2"></i> 预测下一行
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧图鉴 (Requirement 1: Slide Right) -->
+        <div class="side-section" id="side-panel">
+            <div class="game-panel">
+                <div class="panel-header">
+                    <span><i class="fas fa-book me-2"></i> 属性图鉴</span>
+                    <button class="btn btn-sm text-secondary" onclick="toggleSidePanel()"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="intro-list" id="intro-container">
+                    <!-- JS 生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗 -->
+    <div class="modal fade" id="attrSelectorModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark border-secondary">
+                    <h5 class="modal-title text-warning"><i class="fas fa-eye me-2"></i>录入观测结果</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body bg-dark">
+                    
+                    <div class="selection-grid" id="attr-grid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ================= 配置数据 =================
+        const ATTRIBUTES = [
+            { id: 1, name: '能量涌动', desc: '每个被摧毁的建筑都会为您额外提供13%战舰能量。', imagePath: './image/属性1.png' },
+            { id: 2, name: '炮火连天', desc: '使多管火箭炮和火炮这两种能力的伤害提升10%。', imagePath: './image/属性2.png' },
+            { id: 3, name: '肾上腺素', desc: '使已方单位的移动和攻击速度提升5%。', imagePath: './image/属性3.png' },
+            { id: 4, name: '前仆后继', desc: '每次损失单位时，使其他己方单位的速度提升0.15%。', imagePath: './image/属性4.png' },
+            { id: 5, name: '活力汲取', desc: '您的所有单位都可在造成伤害时恢复生命值，数值为伤害的5.5%', imagePath: './image/属性5.png' },
+            { id: 6, name: '干扰信号', desc: '使敌方防御设施的速度减慢10.5%。', imagePath: './image/属性6.png' },
+            { id: 7, name: '破坏阻滞', desc: '使敌方防御相关雕像的效果降低9%。', imagePath: './image/属性7.png' },
+            { id: 8, name: '坚固装甲', desc: '使敌方防御设施每次攻击的基础伤害减少100，但减伤的上限为40%', imagePath: './image/属性8.png' },
+            { id: 9, name: '情报压制', desc: '己方单位获得敌方进攻相关雕像22%的加成效果。', imagePath: './image/属性9.png' },
+            { id: 10, name: '战地急救', desc: '战斗结束后，10%的阵亡单位会复活。', imagePath: './image/属性10.png' },
+            { id: 11, name: '炼金技术', desc: '将夺取到的建筑资源的1.5%转换为不同资源，以平衡您存储的资源数量。', imagePath: './image/属性11.png' },
+            { id: 12, name: '绝缘材料', desc: '使已方部队受到的负面效果持续时间缩短15%，如瘫痪、冰冻等。', imagePath: './image/属性12.png' }
+        ];
+
+        const PRIORITY_LIST = [ 11, 8, 7,  4, 5, 10, 1, 2, 3, 8, 9, 6, 12]; // 优先级顺序
+
+        // ================= 全局状态 =================
+        let appState = {
+            currentSeq: 1,
+            maxSeq: 0,
+            records: {}, // { seq: { green: {id, mod}, ..., selected: 'green', timestamp: 123456789 } }
+            expandedRows: 0, // Requirement 6: 已展开的历史行数
+            panelOpen: true
+        };
+
+        let pendingEdit = { seq: 0, type: '' };
+        const selectorModal = new bootstrap.Modal(document.getElementById('attrSelectorModal'));
+
+        // ================= 初始化 =================
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            renderSidePanel();
+            renderAll();
+        });
+
+        // ================= 侧边栏交互 (Requirement 1) =================
+        function toggleSidePanel() {
+            appState.panelOpen = !appState.panelOpen;
+            const panel = document.getElementById('side-panel');
+            const icon = document.getElementById('panel-toggle-icon');
+            
+            if (appState.panelOpen) {
+                panel.classList.remove('collapsed');
+                icon.className = 'fas fa-book-open';
+            } else {
+                panel.classList.add('collapsed');
+                icon.className = 'fas fa-book';
+            }
+            // 不需要saveData，通常这个是临时UI状态，或者你需要的话可以加
+        }
+
+        // ================= 核心渲染逻辑 =================
+        function renderAll() {
+            const tbody = document.getElementById('sequence-body');
+            tbody.innerHTML = '';
+            document.getElementById('nav-seq').innerText = `#${String(appState.currentSeq).padStart(2, '0')}`;
+
+            if (appState.maxSeq === 0) {
+                document.getElementById('empty-hint').style.display = 'block';
+                document.getElementById('add-row-container').style.display = 'none';
+                return;
+            }
+            document.getElementById('empty-hint').style.display = 'none';
+            document.getElementById('add-row-container').style.display = 'block';
+
+            // Requirement 6: 步进式折叠逻辑
+            const ALWAYS_SHOW = 2; // 总是显示的最近历史行数
+            const historyCount = appState.currentSeq - 1;
+            
+            // 计算当前应该显示的起始历史索引
+            // 总共的历史行有 historyCount 行
+            // 我们已经展开了 expandedRows 行，加上总是显示的 2 行
+            const visibleHistoryCount = ALWAYS_SHOW + appState.expandedRows;
+            
+            // 还有多少行被折叠
+            const hiddenCount = Math.max(0, historyCount - visibleHistoryCount);
+            
+            // 渲染折叠条
+            if (hiddenCount > 0) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td colspan="5" class="p-0">
+                        <div class="fold-bar" onclick="expandHistory()">
+                            <i class="fas fa-chevron-up me-2"></i> 
+                            展开更多历史 (剩余折叠: ${hiddenCount} 行)
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            // 渲染循环
+            for (let i = 1; i <= appState.maxSeq; i++) {
+                // 如果当前行属于被折叠的范围，跳过
+                if (i <= hiddenCount) continue;
+
+                const rowData = appState.records[i] || {};
+                const tr = document.createElement('tr');
+                
+                let rowClass = '';
+                if (i < appState.currentSeq) rowClass = 'history-row';
+                else if (i === appState.currentSeq) rowClass = 'current-row';
+                tr.className = rowClass;
+
+                const bestType = (i >= appState.currentSeq) ? calculateBest(rowData) : null;
+                const timeStr = formatTime(rowData.timestamp); // Requirement 3
+
+                tr.innerHTML = `
+                    <td>
+                        <div class="font-monospace fw-bold fs-5">${i}</div>
+                        ${timeStr ? `<span class="timestamp-tag">${timeStr}</span>` : ''}
+                    </td>
+                    ${renderCell(i, 'green', rowData, bestType === 'green')}
+                    ${renderCell(i, 'blue', rowData, bestType === 'blue')}
+                    ${renderCell(i, 'red', rowData, bestType === 'red')}
+                    ${renderCell(i, 'purple', rowData, bestType === 'purple')}
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        // 展开历史 (每次10行)
+        function expandHistory() {
+            appState.expandedRows += 10;
+            renderAll(); 
+            // 暂不保存expandedRows到本地，刷新重置折叠比较清爽，也可按需保存
+        }
+
+        // 时间格式化 YYYY/MM/DD HH:mm:ss
+        function formatTime(ts) {
+            if (!ts) return '';
+            const d = new Date(ts);
+            const pad = n => n.toString().padStart(2, '0');
+            return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+
+        function calculateBest(rowData) {
+            let bestPriority = 999;
+            let bestType = null;
+            ['green', 'blue', 'red', 'purple'].forEach(type => {
+                const data = rowData[type];
+                if (data && data.id) {
+                    const idx = PRIORITY_LIST.indexOf(data.id);
+                    if (idx !== -1 && idx < bestPriority) {
+                        bestPriority = idx; bestType = type;
+                    }
+                }
+            });
+            return bestType;
+        }
+
+        function renderCell(seq, type, rowData, isBest) {
+            const cellData = rowData[type];
+            const isSelected = rowData.selected === type;
+            const isHistory = seq < appState.currentSeq;
+            const isCurrent = seq === appState.currentSeq;
+
+            let cls = `attr-box border-${type}`;
+            if (!cellData) cls += ' empty';
+            else cls += ' filled';
+
+            if (isHistory) {
+                if (isSelected) cls += ' is-selected';
+                else cls += ' not-selected';
+            } else if (isBest) {
+                cls += ' best-choice';
+            }
+
+            let content = '';
+            if (cellData) {
+                const src = `./image/属性${cellData.id}.png`;
+                const fallback = `https://via.placeholder.com/120/333/fff?text=${cellData.id}`;
+                content += `<img src="${src}" class="main-attr" onerror="this.src='${fallback}'">`;
+                
+                if (cellData.mod === 'coin') content += `<img src="./image/升级币.png" class="modifier-icon">`;
+                if (cellData.mod === 'level') content += `<img src="./image/等级提升.png" class="modifier-icon">`;
+            }
+
+            let btn = '';
+            if (isCurrent && cellData) {
+                btn = `<button class="build-btn" onclick="buildIt(${seq}, '${type}', event)">已获取</button>`;
+            }
+
+            const clickAttr = isHistory ? '' : `onclick="openModal(${seq}, '${type}')"`;
+
+            return `<td><div class="${cls}" ${clickAttr}>${content}${btn}</div></td>`;
+        }
+
+        // ================= 弹窗逻辑 (Requirement 2) =================
+        function openModal(seq, type) {
+            pendingEdit = { seq, type };
+            const grid = document.getElementById('attr-grid');
+            grid.innerHTML = '';
+
+            ATTRIBUTES.forEach(attr => {
+                const div = document.createElement('div');
+                div.className = 'select-item';
+                const fallback = `https://via.placeholder.com/100/333/ccc?text=${attr.id}`;
+                
+                div.innerHTML = `
+                    <img src="${attr.imagePath}" onerror="this.src='${fallback}'">
+                    <div class="fw-bold text-light">${attr.name}</div>
+                    
+                    <!-- 悬停显示的遮罩层 -->
+                    <div class="select-overlay">
+                        <div class="btn-choice" onclick="selectAttr(${attr.id}, 'coin', event)">
+                            <img src="./image/升级币.png"> 升级币
+                        </div>
+                        <div class="btn-choice" onclick="selectAttr(${attr.id}, 'level', event)">
+                            <img src="./image/等级提升.png"> 等级提升
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(div);
+            });
+            selectorModal.show();
+        }
+
+        function selectAttr(id, mod, e) {
+            e.stopPropagation();
+            const { seq, type } = pendingEdit;
+            if (!appState.records[seq]) appState.records[seq] = {};
+            
+            appState.records[seq][type] = { id, mod };
+            save();
+            renderAll();
+            selectorModal.hide();
+        }
+
+        // ================= 建造与数据 =================
+        function buildIt(seq, type, e) {
+            e.stopPropagation();
+            if (!appState.records[seq]) appState.records[seq] = {};
+            
+            appState.records[seq].selected = type;
+            appState.records[seq].timestamp = Date.now(); // Requirement 3
+            
+            appState.currentSeq++;
+            if (appState.currentSeq > appState.maxSeq) appState.maxSeq = appState.currentSeq;
+            
+            save();
+            renderAll();
+            
+            // 自动滚动到底部
+            setTimeout(() => {
+                 const container = document.getElementById('table-scroll-area');
+                 // 稍微向下滚动一点，保持聚焦
+                 container.scrollTop += 100; 
+            }, 100);
+        }
+
+        function undoLastBuild() {
+            if (appState.currentSeq <= 1) return;
+            const prev = appState.currentSeq - 1;
+            if (appState.records[prev]) {
+                appState.records[prev].selected = null;
+                appState.records[prev].timestamp = null;
+            }
+            appState.currentSeq--;
+            save();
+            renderAll();
+        }
+
+        function renderSidePanel() {
+            const container = document.getElementById('intro-container');
+            container.innerHTML = '';
+            ATTRIBUTES.forEach(attr => {
+                const d = document.createElement('div');
+                d.className = 'intro-card';
+                const fb = `https://via.placeholder.com/100/333/fff?text=${attr.id}`;
+                d.innerHTML = `
+                    <img src="${attr.imagePath}" class="intro-img" onerror="this.src='${fb}'">
+                    <div>
+                        <h6 class="text-warning mb-1">${attr.name}</h6>
+                        <p class="text-secondary small mb-0">${attr.desc}</p>
+                    </div>
+                `;
+                container.appendChild(d);
+            });
+        }
+
+        function addNewRow() {
+            appState.maxSeq++;
+            renderAll();
+            save();
+            setTimeout(() => {
+                const c = document.getElementById('table-scroll-area');
+                c.scrollTop = c.scrollHeight;
+            }, 100);
+        }
+
+        function generateDemo() {
+            appState.currentSeq = 1;
+            appState.maxSeq = 15;
+            appState.records = {};
+            for(let i=1; i<=15; i++) {
+                appState.records[i] = {
+                    green: { id: 1, mod: 'coin' },
+                    blue: { id: 6, mod: 'level' },
+                    red: { id: 4, mod: 'coin' },
+                    purple: { id: 12, mod: 'level' }
+                };
+            }
+            save();
+            renderAll();
+        }
+
+        function generateTestDataForExport() {
+            appState.currentSeq = 5;
+            appState.maxSeq = 10;
+            appState.records = {};
+
+            // 创建模拟数据
+            appState.records[1] = {
+                green: { id: 3, mod: 'coin' },
+                blue: { id: 7, mod: 'level' },
+                red: { id: 2, mod: 'coin' },
+                purple: { id: 11, mod: 'level' },
+                selected: 'blue',
+                timestamp: Date.now() - 86400000 * 4 // 4天前
+            };
+
+            appState.records[2] = {
+                green: { id: 8, mod: 'level' },
+                blue: { id: 1, mod: 'coin' },
+                red: { id: 9, mod: 'level' },
+                purple: { id: 5, mod: 'coin' },
+                selected: 'green',
+                timestamp: Date.now() - 86400000 * 3 // 3天前
+            };
+
+            appState.records[3] = {
+                green: { id: 4, mod: 'coin' },
+                blue: { id: 10, mod: 'level' },
+                red: { id: 6, mod: 'coin' },
+                purple: { id: 2, mod: 'level' },
+                selected: 'red',
+                timestamp: Date.now() - 86400000 * 2 // 2天前
+            };
+
+            appState.records[4] = {
+                green: { id: 12, mod: 'level' },
+                blue: { id: 3, mod: 'coin' },
+                red: { id: 8, mod: 'level' },
+                purple: { id: 1, mod: 'coin' },
+                selected: 'purple',
+                timestamp: Date.now() - 86400000 // 1天前
+            };
+
+            appState.records[5] = {
+                green: { id: 5, mod: 'coin' },
+                blue: { id: 9, mod: 'level' },
+                red: { id: 11, mod: 'coin' },
+                purple: { id: 7, mod: 'level' },
+                selected: null,
+                timestamp: null
+            };
+
+            appState.records[6] = {
+                green: { id: 2, mod: 'level' },
+                blue: { id: 12, mod: 'coin' },
+                red: { id: 4, mod: 'level' },
+                purple: { id: 10, mod: 'coin' },
+                selected: null,
+                timestamp: null
+            };
+
+            appState.records[7] = {
+                green: { id: 6, mod: 'coin' },
+                blue: { id: 8, mod: 'level' },
+                red: { id: 1, mod: 'coin' },
+                purple: { id: 3, mod: 'level' },
+                selected: null,
+                timestamp: null
+            };
+
+            appState.records[8] = {
+                green: { id: 10, mod: 'level' },
+                blue: { id: 2, mod: 'coin' },
+                red: { id: 7, mod: 'level' },
+                purple: { id: 9, mod: 'coin' },
+                selected: null,
+                timestamp: null
+            };
+
+            appState.records[9] = {
+                green: { id: 1, mod: 'coin' },
+                blue: { id: 5, mod: 'level' },
+                red: { id: 12, mod: 'coin' },
+                purple: { id: 4, mod: 'level' },
+                selected: null,
+                timestamp: null
+            };
+
+            appState.records[10] = {
+                green: { id: 9, mod: 'level' },
+                blue: { id: 11, mod: 'coin' },
+                red: { id: 3, mod: 'level' },
+                purple: { id: 6, mod: 'coin' },
+                selected: null,
+                timestamp: null
+            };
+
+            save();
+            renderAll();
+            showNotification('测试数据已生成，可以测试导出功能了！', 'success');
+        }
+
+        function save() { localStorage.setItem('bb_sim_final_v2', JSON.stringify(appState)); }
+        function loadData() {
+            const r = localStorage.getItem('bb_sim_final_v2');
+            if (r) {
+                appState = JSON.parse(r);
+                if (typeof appState.expandedRows === 'undefined') appState.expandedRows = 0;
+            }
+        }
+        function resetAll() {
+            if (confirm('确认清空所有数据？')) {
+                localStorage.removeItem('bb_sim_final_v2');
+                location.reload();
+            }
+        }
+
+        // ================= 数据导入导出功能 =================
+        function exportData() {
+            try {
+                const exportData = {
+                    version: '1.0',
+                    exportTime: new Date().toISOString(),
+                    data: appState
+                };
+
+                const jsonString = JSON.stringify(exportData, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `海岛奇兵雕刻数据_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                URL.revokeObjectURL(url);
+
+                // 显示成功提示
+                showNotification('数据导出成功！', 'success');
+            } catch (error) {
+                console.error('导出数据时发生错误:', error);
+                showNotification('导出数据失败，请重试', 'error');
+            }
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.name.endsWith('.json')) {
+                showNotification('请选择有效的JSON文件', 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importData = JSON.parse(e.target.result);
+
+                    // 验证数据格式
+                    if (!importData.data || typeof importData.data !== 'object') {
+                        showNotification('文件格式无效', 'error');
+                        return;
+                    }
+
+                    const importedState = importData.data;
+
+                    // 确认是否覆盖现有数据
+                    const hasExistingData = appState.maxSeq > 0;
+                    const confirmMessage = hasExistingData
+                        ? '检测到现有数据，是否覆盖当前所有数据？此操作不可撤销！'
+                        : '确认导入数据？';
+
+                    if (confirm(confirmMessage)) {
+                        // 验证并清理数据
+                        const cleanedState = validateAndCleanData(importedState);
+
+                        // 更新应用状态
+                        appState = cleanedState;
+                        save();
+                        renderAll();
+
+                        showNotification('数据导入成功！', 'success');
+                    }
+                } catch (error) {
+                    console.error('导入数据时发生错误:', error);
+                    showNotification('导入数据失败，请检查文件格式', 'error');
+                }
+            };
+
+            reader.readAsText(file);
+
+            // 重置文件输入，允许重复选择同一文件
+            event.target.value = '';
+        }
+
+        function validateAndCleanData(state) {
+            // 创建默认状态模板
+            const cleanState = {
+                currentSeq: 1,
+                maxSeq: 0,
+                records: {},
+                expandedRows: 0,
+                panelOpen: true
+            };
+
+            // 复制和验证数据
+            if (typeof state === 'object') {
+                // 基本字段验证
+                if (typeof state.currentSeq === 'number' && state.currentSeq > 0) {
+                    cleanState.currentSeq = Math.max(1, Math.floor(state.currentSeq));
+                }
+
+                if (typeof state.maxSeq === 'number' && state.maxSeq >= 0) {
+                    cleanState.maxSeq = Math.max(0, Math.floor(state.maxSeq));
+                }
+
+                if (typeof state.expandedRows === 'number' && state.expandedRows >= 0) {
+                    cleanState.expandedRows = Math.max(0, Math.floor(state.expandedRows));
+                }
+
+                if (typeof state.panelOpen === 'boolean') {
+                    cleanState.panelOpen = state.panelOpen;
+                }
+
+                // 验证records数据
+                if (typeof state.records === 'object' && state.records !== null) {
+                    for (const seq in state.records) {
+                        const seqNum = parseInt(seq);
+                        if (isNaN(seqNum) || seqNum < 1) continue;
+
+                        const record = state.records[seq];
+                        if (typeof record === 'object' && record !== null) {
+                            cleanState.records[seqNum] = {};
+
+                            // 验证属性数据
+                            ['green', 'blue', 'red', 'purple'].forEach(type => {
+                                if (record[type] && typeof record[type] === 'object') {
+                                    const attr = record[type];
+                                    if (typeof attr.id === 'number' && attr.id >= 1 && attr.id <= 12) {
+                                        cleanState.records[seqNum][type] = {
+                                            id: Math.max(1, Math.min(12, Math.floor(attr.id)))
+                                        };
+
+                                        if (attr.mod === 'coin' || attr.mod === 'level') {
+                                            cleanState.records[seqNum][type].mod = attr.mod;
+                                        }
+                                    }
+                                }
+                            });
+
+                            // 验证选中状态
+                            if (record.selected && ['green', 'blue', 'red', 'purple'].includes(record.selected)) {
+                                cleanState.records[seqNum].selected = record.selected;
+                            }
+
+                            // 验证时间戳
+                            if (typeof record.timestamp === 'number' && record.timestamp > 0) {
+                                cleanState.records[seqNum].timestamp = record.timestamp;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 确保数据一致性
+            cleanState.maxSeq = Math.max(cleanState.maxSeq, ...Object.keys(cleanState.records).map(Number));
+            cleanState.currentSeq = Math.max(1, Math.min(cleanState.maxSeq + 1, cleanState.currentSeq));
+
+            return cleanState;
+        }
+
+        function showNotification(message, type = 'info') {
+            // 创建通知元素
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} position-fixed top-0 start-50 translate-middle-x mt-3`;
+            notification.style.zIndex = '9999';
+            notification.style.minWidth = '300px';
+            notification.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-${type === 'error' ? 'exclamation-triangle' : type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>
+                    ${message}
+                </div>
+            `;
+
+            document.body.appendChild(notification);
+
+            // 3秒后自动移除
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
